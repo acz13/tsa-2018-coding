@@ -8,13 +8,13 @@ from csv import Error as csvError
 from xlrd import XLRDError
 import states
 import readers
-
+import os
+import tkinter
 DataGen = Generator[Tuple[float, float], None, None]
 
 
 class Rocket:
     """Simple iterator (previous history is left for the frontend to handle)"""
-
     last_time = -1
     last_three = deque(maxlen=3)
 
@@ -60,5 +60,16 @@ class Rocket:
 
 if __name__ == '__main__':
     import sys
-    for state in Rocket("/home/alchzh/Downloads/coding.csv"):
+    for state in Rocket(os.getcwd()+"/coding.csv"):
         print(state, file=sys.stderr)
+print("\n\n")
+top = tkinter.Tk()
+velocityLabel = tkinter.Label(top, text="Velocity")
+altitudeLabel = tkinter.Label(top, text="Altitude")
+buttonForward = tkinter.Button(top, text="Forward")
+buttonBackward = tkinter.Button(top, text="Backward")
+velocityLabel.pack()
+altitudeLabel.pack()
+buttonForward.pack()
+buttonBackward.pack()
+top.mainloop()
