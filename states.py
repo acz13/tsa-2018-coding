@@ -1,29 +1,20 @@
-"""All the states as Java style static classes in line with rules"""
+"""All the states as Java style static classes in line with rules
 
-from typing import Tuple, List
-from scipy.interpolate import UnivariateSpline
-
-
-FTriplet = Tuple[float, float, float]  # Tuple with three floats
+Originally written for when there is error involved."""
 
 
 class State:
     """The base state class. States (for regionals) need just a condition
-    method (pulled from the rules) as well as an update function to update
-    the spline"""
+    method (pulled from the rules) as well as an update function that would
+    have been used to update the filter."""
 
-    smoothing: int = None  # Not no smoothing, this is scipy default smoothing!
-    next_state: 'State' = None
-
-    def __init__(self, start_time: float, start_alt: float,
-                 start_vel: float) -> None:
-        self.times: List[float] = [start_time]
-        self.alts: List[float] = [start_alt]
-        self.interp_alts: List[float] = [start_alt]
-        self.interp_vels: List[float] = [start_vel]
+    def __init__(self, start_time, start_alt):
+        self.last_time = start_time
+        self.last_alt = start_alt
+        self.last_vel = 0.0
 
     @classmethod
-    def set_next_state(cls, scls: 'State'):
+    def set_next_state(cls, scls):
         """Decorator for seamless next_state setting. Mostly for code
         readability. Without this we'd need to have the states in reverse
         order with only negligible one-time performance benefit."""
@@ -31,30 +22,18 @@ class State:
         return scls
 
     @staticmethod
-    def condition(times: FTriplet, alts: FTriplet, vels: FTriplet) -> bool:
-        # pylint: disable=W0613
+    def condition(times, alts, vels):
         """The condition for advancing to this state"""
         raise NotImplementedError
 
-    def update(self, time: float, altitude: float) -> Tuple[float, float]:
+    def velocity(self, time, altitude):
         """Update the spline with the latest data.
-        Returns (altitude, velocity)"""
+        Returns (altitude, velocity). Would have been used w/ error
+        correction w/ filter."""
 
-        self.times.append(time)
-        self.alts.append(altitude)
-
-        if len(self.times) >= 4:
-            spl = UnivariateSpline(self.times, self.alts, s=self.smoothing)
-            interp_alt = spl(time, 0)
-            interp_vel = spl(time, 1)
-        else:
-            interp_alt = altitude
-            interp_vel = (altitude-self.alts[-2])/(time-self.times[-2])
-
-        self.interp_alts.append(interp_alt)
-        self.interp_vels.append(interp_vel)
-
-        return (interp_alt, interp_vel)
+        velocity = (altitude - self.last_alt)/(time - self.last_time)
+        self.last_alt, self.last_time = altitude, time
+        return velocity
 
 
 class Launch(State):
@@ -69,17 +48,18 @@ class Drogue(State):
     failure, a failsafe time has been reached (t>15s)"""
 
     @staticmethod
-    def condition(times: FTriplet, alts: FTriplet, vels: FTriplet) -> bool:
+    def condition(times, alts, vels):
         return times[2] > 15 or all(vel < 0 for vel in vels)
 
 
 @Drogue.set_next_state
 class Main(State):
     """To enter the Main state and deploy the main parachute, the rocket must
-    be low enough to ensure it doesn’t drift too far (h<200ft)."""
+    be low enough to ensure it doesn't drift too far (h<200ft)."""
+
     @staticmethod
-    def condition(times: FTriplet, alts: FTriplet, vels: FTriplet) -> bool:
-        return all(i < 200 for i in alts)
+    def condition(times, alts, vels):
+        return all(alt < 200 for alt in alts)
 
 
 @Main.set_next_state
@@ -87,11 +67,11 @@ class Landed(State):
     """To enter the Landed state and activate the recovery GPS, the rocket
     must be stationary on the ground (v=0ft/s).
 
-    WARNING: This state is impossible to reach with the sample data"""
+    WARNING: state is impossible to reach with the sample xls data"""
 
     @staticmethod
-    def condition(times: FTriplet, alts: FTriplet, vels: FTriplet) -> bool:
-        return False
+    def condition(times, alts, vels):
+        return all(vel < 1 for vel in vels)
 
 
 InitialState = Launch  # Set initial state
